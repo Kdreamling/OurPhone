@@ -4,7 +4,9 @@ import android.accessibilityservice.AccessibilityService
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.dream.ourphone.brain.CommandRouter
@@ -38,6 +40,7 @@ class PhoneAccessibilityService : AccessibilityService() {
     private lateinit var deviceInfo: DeviceInfo
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val gson = Gson()
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private var currentPackage: String? = null
     private var lastReportTime = 0L
@@ -48,6 +51,7 @@ class PhoneAccessibilityService : AccessibilityService() {
         Log.i(TAG, "Service connected — 小克和晨上线了")
 
         startForegroundKeepAlive()
+        acquireWakeLock()
 
         appManager = AppManager(this)
         deviceInfo = DeviceInfo(this)
@@ -127,6 +131,8 @@ class PhoneAccessibilityService : AccessibilityService() {
         gatewayConnected = false
         gateway.disconnect()
         scope.cancel()
+        wakeLock?.release()
+        wakeLock = null
         super.onDestroy()
     }
 
@@ -159,6 +165,14 @@ class PhoneAccessibilityService : AccessibilityService() {
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
             .build()
+    }
+
+    private fun acquireWakeLock() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "OurPhone::KeepAlive"
+        ).apply { acquire() }
     }
 
     fun getGateway(): GatewayWebSocket = gateway
