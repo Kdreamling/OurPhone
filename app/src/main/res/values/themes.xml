@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OurPhone" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">#5B4A3F</item>
+        <item name="colorPrimaryVariant">#3E2E23</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#D4A574</item>
+        <item name="colorSecondaryVariant">#B8865A</item>
+        <item name="colorOnSecondary">#000000</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>
