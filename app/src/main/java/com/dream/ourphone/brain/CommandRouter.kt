@@ -34,6 +34,13 @@ class CommandRouter(
 
         Log.d(TAG, "Received command: $type")
 
+        try { handleCommandInner(msg, type, params) } catch (e: Exception) {
+            Log.e(TAG, "Command $type crashed", e)
+            replyData(msg, mapOf("error" to "crash: ${e.message}"))
+        }
+    }
+
+    private fun handleCommandInner(msg: JsonObject, type: String, params: JsonObject) {
         when (type) {
             // ===== 手势操作 =====
             "tap" -> scope.launch {
@@ -152,7 +159,7 @@ class CommandRouter(
                 }
             }
 
-            "device_info" -> {
+            "device_info" -> scope.launch {
                 val info = deviceInfo.collect()
                 replyData(msg, info)
             }
