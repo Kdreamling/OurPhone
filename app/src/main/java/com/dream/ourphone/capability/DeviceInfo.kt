@@ -2,8 +2,6 @@ package com.dream.ourphone.capability
 
 import android.app.ActivityManager
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
@@ -29,21 +27,12 @@ class DeviceInfo(private val context: Context) {
     }
 
     private fun getBattery(): Map<String, Any?> {
-        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-        val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val charging = bm.isCharging
         return mapOf(
-            "level" to if (scale > 0) (level * 100 / scale) else -1,
-            "charging" to (status == BatteryManager.BATTERY_STATUS_CHARGING
-                    || status == BatteryManager.BATTERY_STATUS_FULL),
-            "plugged" to when (plugged) {
-                BatteryManager.BATTERY_PLUGGED_AC -> "ac"
-                BatteryManager.BATTERY_PLUGGED_USB -> "usb"
-                BatteryManager.BATTERY_PLUGGED_WIRELESS -> "wireless"
-                else -> "none"
-            }
+            "level" to level,
+            "charging" to charging
         )
     }
 
