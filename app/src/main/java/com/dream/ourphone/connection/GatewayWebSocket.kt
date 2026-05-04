@@ -13,17 +13,19 @@ class GatewayWebSocket(
 ) {
     companion object {
         private const val TAG = "GatewayWS"
-        private const val RECONNECT_DELAY_MS = 5000L
-        private const val PING_INTERVAL_MS = 30000L
+        private const val RECONNECT_DELAY_MS = 3000L
+        private const val PING_INTERVAL_MS = 15000L
     }
 
     private val client = OkHttpClient.Builder()
         .pingInterval(PING_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
         .build()
     private val gson = Gson()
     private var webSocket: WebSocket? = null
-    private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val reconnectScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var shouldReconnect = true
+    private var reconnectJob: Job? = null
 
     @Volatile
     var isConnected: Boolean = false
@@ -36,9 +38,9 @@ class GatewayWebSocket(
 
     fun disconnect() {
         shouldReconnect = false
+        reconnectJob?.cancel()
         webSocket?.close(1000, "bye")
         webSocket = null
-        scope.cancel()
     }
 
     fun send(type: String, data: Map<String, Any?>) {
@@ -119,8 +121,8 @@ class GatewayWebSocket(
 
     private fun scheduleReconnect() {
         if (!shouldReconnect) return
-        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-        scope.launch {
+        reconnectJob?.cancel()
+        reconnectJob = reconnectScope.launch {
             delay(RECONNECT_DELAY_MS)
             Log.i(TAG, "Reconnecting...")
             doConnect()

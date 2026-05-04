@@ -189,7 +189,7 @@ class PhoneAccessibilityService : AccessibilityService() {
     private fun startHeartbeat() {
         scope.launch {
             while (isActive) {
-                delay(30_000)
+                delay(15_000)
                 gateway.sendHeartbeat()
             }
         }
