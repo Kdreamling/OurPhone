@@ -44,9 +44,13 @@ class GatewayWebSocket(
     }
 
     fun send(type: String, data: Map<String, Any?>) {
-        val msg = mapOf("type" to type, "data" to data)
-        val json = gson.toJson(msg)
-        webSocket?.send(json) ?: Log.w(TAG, "WebSocket not connected, dropping: $type")
+        try {
+            val msg = mapOf("type" to type, "data" to data)
+            val json = gson.toJson(msg)
+            webSocket?.send(json) ?: Log.w(TAG, "WebSocket not connected, dropping: $type")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send $type", e)
+        }
     }
 
     fun sendScreenUpdate(packageName: String, flatSnapshot: Map<String, Any>) {

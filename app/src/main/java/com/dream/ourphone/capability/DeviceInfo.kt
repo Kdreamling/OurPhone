@@ -12,18 +12,24 @@ import android.provider.Settings
 class DeviceInfo(private val context: Context) {
 
     fun collect(): Map<String, Any?> {
-        return mapOf(
-            "battery" to getBattery(),
-            "storage" to getStorage(),
-            "memory" to getMemory(),
-            "screen" to getScreen(),
-            "network" to getNetwork(),
-            "brightness" to getBrightness(),
-            "volume" to getVolume(),
-            "model" to android.os.Build.MODEL,
-            "android_version" to android.os.Build.VERSION.RELEASE,
-            "sdk" to android.os.Build.VERSION.SDK_INT
-        )
+        val result = mutableMapOf<String, Any?>()
+        result["model"] = android.os.Build.MODEL
+        result["android_version"] = android.os.Build.VERSION.RELEASE
+        result["sdk"] = android.os.Build.VERSION.SDK_INT
+        fun safe(key: String, block: () -> Any?) {
+            try { result[key] = block() } catch (e: Exception) {
+                result[key] = "error: ${e.message}"
+                android.util.Log.e("DeviceInfo", "$key failed", e)
+            }
+        }
+        safe("battery") { getBattery() }
+        safe("storage") { getStorage() }
+        safe("memory") { getMemory() }
+        safe("screen") { getScreen() }
+        safe("network") { getNetwork() }
+        safe("brightness") { getBrightness() }
+        safe("volume") { getVolume() }
+        return result
     }
 
     private fun getBattery(): Map<String, Any?> {
