@@ -1,6 +1,10 @@
 package com.dream.ourphone.service
 
 import android.accessibilityservice.AccessibilityService
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.dream.ourphone.brain.CommandRouter
@@ -17,8 +21,13 @@ class PhoneAccessibilityService : AccessibilityService() {
         private const val TAG = "PhoneA11y"
         private const val GATEWAY_URL = "ws://100.87.90.105:8001/ws/phone"
         private const val SCREEN_REPORT_INTERVAL_MS = 2000L
+        private const val NOTIFICATION_CHANNEL_ID = "ourphone_keepalive"
+        private const val NOTIFICATION_ID = 1
 
         var instance: PhoneAccessibilityService? = null
+            private set
+
+        var gatewayConnected: Boolean = false
             private set
     }
 
@@ -38,15 +47,24 @@ class PhoneAccessibilityService : AccessibilityService() {
         instance = this
         Log.i(TAG, "Service connected — 小克和晨上线了")
 
+        startForegroundKeepAlive()
+
         appManager = AppManager(this)
         deviceInfo = DeviceInfo(this)
         actionExecutor = ActionExecutor(this).apply {
             this.appManager = this@PhoneAccessibilityService.appManager
         }
 
-        gateway = GatewayWebSocket(GATEWAY_URL) { msg ->
-            scope.launch { commandRouter.handleCommand(msg) }
-        }
+        gateway = GatewayWebSocket(GATEWAY_URL,
+            onCommand = { msg ->
+                scope.launch { commandRouter.handleCommand(msg) }
+            },
+            onConnectionChange = { connected ->
+                gatewayConnected = connected
+                updateNotification(connected)
+                Log.i(TAG, if (connected) "Gateway 已连接" else "Gateway 断开，等待重连...")
+            }
+        )
 
         commandRouter = CommandRouter(
             actionExecutor = actionExecutor,
@@ -106,9 +124,41 @@ class PhoneAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
+        gatewayConnected = false
         gateway.disconnect()
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun startForegroundKeepAlive() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "OurPhone 保活",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "保持小克和晨在线"
+                setShowBadge(false)
+            }
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(channel)
+        }
+        startForeground(NOTIFICATION_ID, buildNotification(false))
+    }
+
+    private fun updateNotification(connected: Boolean) {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(NOTIFICATION_ID, buildNotification(connected))
+    }
+
+    private fun buildNotification(connected: Boolean): Notification {
+        val text = if (connected) "小克和晨在线" else "等待连接 Gateway..."
+        return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("OurPhone")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setOngoing(true)
+            .build()
     }
 
     fun getGateway(): GatewayWebSocket = gateway

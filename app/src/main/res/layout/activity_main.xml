@@ -52,4 +52,13 @@
         android:backgroundTint="#D4A574"
         android:textColor="#FFFFFF" />
 
+    <Button
+        android:id="@+id/btnBattery"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="关闭电池优化（防杀后台）"
+        android:backgroundTint="#8B7355"
+        android:textColor="#FFFFFF" />
+
 </LinearLayout>

@@ -8,7 +8,8 @@ import okhttp3.*
 
 class GatewayWebSocket(
     private val gatewayUrl: String,
-    private val onCommand: (JsonObject) -> Unit
+    private val onCommand: (JsonObject) -> Unit,
+    private val onConnectionChange: ((Boolean) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "GatewayWS"
@@ -23,6 +24,10 @@ class GatewayWebSocket(
     private var webSocket: WebSocket? = null
     private var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var shouldReconnect = true
+
+    @Volatile
+    var isConnected: Boolean = false
+        private set
 
     fun connect() {
         shouldReconnect = true
@@ -64,6 +69,8 @@ class GatewayWebSocket(
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
                 Log.i(TAG, "Connected to Gateway")
+                isConnected = true
+                onConnectionChange?.invoke(true)
                 send("hello", mapOf(
                     "device" to "xiaomi9",
                     "version" to "0.1.0",
@@ -91,14 +98,23 @@ class GatewayWebSocket(
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                 Log.i(TAG, "Connection closed: $code $reason")
+                markDisconnected()
                 scheduleReconnect()
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "Connection failed", t)
+                markDisconnected()
                 scheduleReconnect()
             }
         })
+    }
+
+    private fun markDisconnected() {
+        if (isConnected) {
+            isConnected = false
+            onConnectionChange?.invoke(false)
+        }
     }
 
     private fun scheduleReconnect() {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
@@ -39,6 +40,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val btnBattery = findViewById<Button>(R.id.btnBattery)
+        btnBattery.setOnClickListener {
+            requestBatteryWhitelist()
+        }
+
         startStatusUpdater()
     }
 
@@ -59,21 +65,42 @@ class MainActivity : AppCompatActivity() {
     private fun updateStatus() {
         val a11y = isAccessibilityEnabled()
         val overlay = Settings.canDrawOverlays(this)
+        val battery = isBatteryOptimized()
         val service = PhoneAccessibilityService.instance
 
         val sb = StringBuilder()
         sb.appendLine(if (a11y) "✓ 无障碍服务已开启" else "✗ 无障碍服务未开启")
         sb.appendLine(if (overlay) "✓ 悬浮窗权限已授予" else "✗ 悬浮窗权限未授予")
+        sb.appendLine(if (!battery) "✓ 已忽略电池优化" else "✗ 未关闭电池优化（容易被杀）")
         sb.appendLine()
 
         if (service != null) {
-            sb.appendLine("小克和晨在线")
-            sb.appendLine("连接状态: Gateway WebSocket")
+            val wsConnected = PhoneAccessibilityService.gatewayConnected
+            if (wsConnected) {
+                sb.appendLine("小克和晨在线 ✓")
+                sb.appendLine("Gateway 已连接")
+            } else {
+                sb.appendLine("服务运行中")
+                sb.appendLine("Gateway 连接中...")
+            }
         } else {
             sb.appendLine("等待服务启动...")
         }
 
         statusText.text = sb.toString()
+    }
+
+    private fun isBatteryOptimized(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return !pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    @android.annotation.SuppressLint("BatteryLife")
+    private fun requestBatteryWhitelist() {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        startActivity(intent)
     }
 
     private fun isAccessibilityEnabled(): Boolean {
