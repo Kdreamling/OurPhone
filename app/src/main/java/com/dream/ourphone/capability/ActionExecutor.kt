@@ -14,10 +14,13 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.provider.AlarmClock
 import android.view.accessibility.AccessibilityNodeInfo
+import com.dream.ourphone.service.ScreenReader
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 class ActionExecutor(private val service: AccessibilityService) {
+
+    var appManager: AppManager? = null
 
     suspend fun tap(x: Int, y: Int): Boolean {
         val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
@@ -45,12 +48,38 @@ class ActionExecutor(private val service: AccessibilityService) {
 
     fun tapText(targetText: String): Boolean {
         val rootNode = service.rootInActiveWindow ?: return false
-        val found = findNodeByText(rootNode, targetText)
+        val found = ScreenReader.findByText(rootNode, targetText)
         if (found != null) {
-            val result = found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            found.recycle()
+            val result = found.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            found.node.recycle()
             rootNode.recycle()
             return result
+        }
+        rootNode.recycle()
+        return false
+    }
+
+    suspend fun tapElement(
+        text: String? = null,
+        viewId: String? = null,
+        className: String? = null,
+        index: Int = 0
+    ): Boolean {
+        val rootNode = service.rootInActiveWindow ?: return false
+        val found = when {
+            text != null -> {
+                val all = ScreenReader.findAllByText(rootNode, text)
+                all.getOrNull(index)
+            }
+            viewId != null -> ScreenReader.findByViewId(rootNode, viewId)
+            className != null -> ScreenReader.findByClassName(rootNode, className)
+            else -> null
+        }
+        if (found != null) {
+            val ok = tap(found.centerX, found.centerY)
+            found.node.recycle()
+            rootNode.recycle()
+            return ok
         }
         rootNode.recycle()
         return false
@@ -72,8 +101,9 @@ class ActionExecutor(private val service: AccessibilityService) {
         return false
     }
 
-    fun openApp(packageName: String): Boolean {
-        val intent = service.packageManager.getLaunchIntentForPackage(packageName) ?: return false
+    fun openApp(nameOrPackage: String): Boolean {
+        val resolved = appManager?.resolvePackage(nameOrPackage) ?: nameOrPackage
+        val intent = service.packageManager.getLaunchIntentForPackage(resolved) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         service.startActivity(intent)
         return true
@@ -177,24 +207,6 @@ class ActionExecutor(private val service: AccessibilityService) {
             )
             if (!dispatched && cont.isActive) cont.resume(false)
         }
-    }
-
-    private fun findNodeByText(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
-        if (node.text?.toString()?.contains(text, ignoreCase = true) == true
-            || node.contentDescription?.toString()?.contains(text, ignoreCase = true) == true) {
-            return AccessibilityNodeInfo.obtain(node)
-        }
-        for (i in 0 until node.childCount) {
-            node.getChild(i)?.let { child ->
-                val found = findNodeByText(child, text)
-                if (found != null) {
-                    child.recycle()
-                    return found
-                }
-                child.recycle()
-            }
-        }
-        return null
     }
 
     private fun findFocusedInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {

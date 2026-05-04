@@ -1,13 +1,14 @@
 package com.dream.ourphone.service
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 import com.dream.ourphone.brain.CommandRouter
 import com.dream.ourphone.capability.ActionExecutor
+import com.dream.ourphone.capability.AppManager
+import com.dream.ourphone.capability.DeviceInfo
 import com.dream.ourphone.connection.GatewayWebSocket
+import com.google.gson.Gson
 import kotlinx.coroutines.*
 
 class PhoneAccessibilityService : AccessibilityService() {
@@ -24,7 +25,10 @@ class PhoneAccessibilityService : AccessibilityService() {
     private lateinit var gateway: GatewayWebSocket
     private lateinit var actionExecutor: ActionExecutor
     private lateinit var commandRouter: CommandRouter
+    private lateinit var appManager: AppManager
+    private lateinit var deviceInfo: DeviceInfo
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val gson = Gson()
 
     private var currentPackage: String? = null
     private var lastReportTime = 0L
@@ -34,7 +38,11 @@ class PhoneAccessibilityService : AccessibilityService() {
         instance = this
         Log.i(TAG, "Service connected — 小克和晨上线了")
 
-        actionExecutor = ActionExecutor(this)
+        appManager = AppManager(this)
+        deviceInfo = DeviceInfo(this)
+        actionExecutor = ActionExecutor(this).apply {
+            this.appManager = this@PhoneAccessibilityService.appManager
+        }
 
         gateway = GatewayWebSocket(GATEWAY_URL) { msg ->
             scope.launch { commandRouter.handleCommand(msg) }
@@ -44,7 +52,9 @@ class PhoneAccessibilityService : AccessibilityService() {
             actionExecutor = actionExecutor,
             gateway = gateway,
             getScreenRoot = { rootInActiveWindow },
-            getCurrentPackage = { currentPackage }
+            getCurrentPackage = { currentPackage },
+            deviceInfo = deviceInfo,
+            appManager = appManager
         )
 
         gateway.connect()
@@ -73,11 +83,18 @@ class PhoneAccessibilityService : AccessibilityService() {
                 if (parcel is android.app.Notification) {
                     val title = parcel.extras?.getString("android.title")
                     val text = parcel.extras?.getString("android.text")
-                    gateway.sendNotification(
-                        event.packageName?.toString() ?: "unknown",
-                        title, text,
-                        System.currentTimeMillis()
-                    )
+                    val pkg = event.packageName?.toString() ?: "unknown"
+                    val ongoing = (parcel.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+
+                    NotificationStore.add(StoredNotification(
+                        packageName = pkg,
+                        title = title,
+                        text = text,
+                        timestamp = System.currentTimeMillis(),
+                        ongoing = ongoing
+                    ))
+
+                    gateway.sendNotification(pkg, title, text, System.currentTimeMillis())
                 }
             }
         }
@@ -107,7 +124,12 @@ class PhoneAccessibilityService : AccessibilityService() {
                 val root = rootInActiveWindow ?: return@launch
                 val snapshot = ScreenReader.captureFlat(root, currentPackage)
                 root.recycle()
-                gateway.sendScreenUpdate(currentPackage ?: "unknown", snapshot)
+                gateway.sendScreenUpdate(currentPackage ?: "unknown", mapOf(
+                    "package" to snapshot.packageName,
+                    "texts" to snapshot.visibleTexts,
+                    "clickables" to snapshot.clickableElements,
+                    "scrollables" to snapshot.scrollableElements
+                ))
             } catch (e: Exception) {
                 Log.e(TAG, "Screen report failed", e)
             }
